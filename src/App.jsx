@@ -71,7 +71,7 @@ function LoadingScreen({ onComplete }) {
   }, [])
 
   useEffect(() => {
-    const id = setInterval(() => setWordIndex(i => (i + 1) % words.length), 900)
+    const id = setInterval(() => setWordIndex(i => Math.min(i + 1, words.length - 1)), 900)
     return () => clearInterval(id)
   }, [])
 
@@ -559,7 +559,7 @@ function InputScreen({ onSubmit }) {
           <div className="gradient-border-wrap" style={{ borderRadius: 9999 }}>
             <button
               className="btn-solid"
-              disabled={value.trim().length < 15}
+              disabled={value.trim().length < 10}
               onClick={() => onSubmit(value.trim())}
               style={{ padding: '11px 24px', fontSize: 13, position: 'relative', zIndex: 1 }}
             >
