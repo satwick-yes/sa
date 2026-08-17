@@ -1,752 +1,1150 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { GoogleGenAI } from '@google/genai'
+import { motion, AnimatePresence } from 'framer-motion'
+import { gsap } from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import Hls from 'hls.js'
 import './index.css'
 
-/* ─── Screen 1: Anti-Landing Page ─── */
-function AntiLandingPage({ onNext }) {
-  const [text, setText] = useState('')
-  const [focused, setFocused] = useState(false)
-  const textareaRef = useRef(null)
+gsap.registerPlugin(ScrollTrigger)
 
-  const examples = [
-    "I want to sell coffee online but don't know about licenses...",
-    "I have a tutoring idea but unsure how to register it...",
-    "I want to start a clothing brand but scared of legal stuff...",
-  ]
-  const [exampleIdx, setExampleIdx] = useState(0)
+const HLS_URL = 'https://stream.mux.com/Aa02T7oM1wH5Mk5EEVDYhbZ1ChcdhRsS2m1NYyx4Ua1g.m3u8'
+
+// ─────────────────────────────────────────────────────────────────
+// HLS VIDEO BACKGROUND
+// ─────────────────────────────────────────────────────────────────
+function HLSVideo({ className = '', style = {}, flipped = false }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    const video = ref.current
+    if (!video) return
+    if (Hls.isSupported()) {
+      const hls = new Hls()
+      hls.loadSource(HLS_URL)
+      hls.attachMedia(video)
+      return () => hls.destroy()
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = HLS_URL
+    }
+  }, [])
+  return (
+    <video
+      ref={ref}
+      autoPlay muted loop playsInline
+      className={className}
+      style={{
+        position: 'absolute',
+        top: '50%', left: '50%',
+        minWidth: '100%', minHeight: '100%',
+        objectFit: 'cover',
+        transform: `translate(-50%, -50%) ${flipped ? 'scaleY(-1)' : ''}`,
+        ...style
+      }}
+    />
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// LOADING SCREEN
+// ─────────────────────────────────────────────────────────────────
+function LoadingScreen({ onComplete }) {
+  const [count, setCount] = useState(0)
+  const [wordIndex, setWordIndex] = useState(0)
+  const words = ['Clarity', 'Purpose', 'Direction']
+  const duration = 2700
 
   useEffect(() => {
-    if (!focused && text === '') {
-      const timer = setInterval(() => {
-        setExampleIdx(i => (i + 1) % examples.length)
-      }, 3500)
-      return () => clearInterval(timer)
+    const start = performance.now()
+    let raf
+    const tick = (now) => {
+      const elapsed = now - start
+      const progress = Math.min(elapsed / duration, 1)
+      setCount(Math.floor(progress * 100))
+      if (progress < 1) {
+        raf = requestAnimationFrame(tick)
+      } else {
+        setTimeout(onComplete, 400)
+      }
     }
-  }, [focused, text])
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  useEffect(() => {
+    const id = setInterval(() => setWordIndex(i => (i + 1) % words.length), 900)
+    return () => clearInterval(id)
+  }, [])
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ position: 'relative', zIndex: 1 }}>
-      {/* Background orbs */}
-      <div className="orb" style={{ width: 500, height: 500, background: 'radial-gradient(circle, rgba(124,106,247,0.12) 0%, transparent 70%)', top: -100, right: -100 }} />
-      <div className="orb" style={{ width: 400, height: 400, background: 'radial-gradient(circle, rgba(124,106,247,0.06) 0%, transparent 70%)', bottom: -50, left: -100 }} />
+    <motion.div
+      initial={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.6, ease: 'easeInOut' } }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'hsl(var(--bg))',
+        display: 'flex', flexDirection: 'column',
+        justifyContent: 'center', alignItems: 'center',
+        padding: 40
+      }}
+    >
+      {/* Top-left label */}
+      <motion.div
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.7, ease: 'easeOut' }}
+        style={{
+          position: 'absolute', top: 32, left: 32,
+          fontSize: 11, color: 'var(--muted-raw)',
+          textTransform: 'uppercase', letterSpacing: '0.3em', fontWeight: 500
+        }}
+      >
+        Zero Confusion
+      </motion.div>
 
-      {/* Nav */}
-      <nav className="flex items-center justify-between px-8 py-6">
-        <div className="flex items-center gap-3">
-          <div style={{
-            width: 36, height: 36, borderRadius: 10,
-            background: 'linear-gradient(135deg, #7c6af7, #9b59f5)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 800, fontSize: 14, color: 'white', letterSpacing: '-0.5px'
-          }}>ZC</div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>Zero Confusion</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>by i-SmokeStack</div>
-          </div>
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-          Trusted by <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>1,200+</span> Indian founders
-        </div>
-      </nav>
-
-      {/* Hero */}
-      <div className="flex-1 flex items-center justify-center px-6">
-        <div style={{ maxWidth: 720, width: '100%' }}>
-
-          <div className="animate-fade-up opacity-0-init" style={{ marginBottom: 24 }}>
-            <span className="tag">India's Clarity-First Platform</span>
-          </div>
-
-          <h1
-            className="animate-fade-up opacity-0-init delay-100"
+      {/* Center — rotating words */}
+      <div style={{ overflow: 'hidden' }}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={wordIndex}
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -20, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
             style={{
-              fontFamily: 'Fraunces, Georgia, serif',
-              fontSize: 'clamp(2rem, 5vw, 3.8rem)',
-              fontWeight: 700,
-              lineHeight: 1.15,
-              letterSpacing: '-0.02em',
-              marginBottom: 20,
-              color: 'var(--text-primary)',
+              fontSize: 'clamp(40px, 8vw, 80px)',
+              fontFamily: 'Instrument Serif, serif',
+              fontStyle: 'italic',
+              color: 'rgba(245,245,245,0.75)',
+              textAlign: 'center',
+              lineHeight: 1
             }}
           >
-            Don't know what you need?{' '}
-            <span style={{
-              background: 'linear-gradient(135deg, #7c6af7, #c084fc)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>
-              That's exactly where we start.
-            </span>
-          </h1>
-
-          <p
-            className="animate-fade-up opacity-0-init delay-200"
-            style={{ fontSize: 18, color: 'var(--text-secondary)', marginBottom: 40, maxWidth: 560, lineHeight: 1.7 }}
-          >
-            Tell us what you're trying to build in India, and we'll tell you your exact next step — nothing more, nothing less.
-          </p>
-
-          {/* Input area */}
-          <div
-            className="animate-fade-up opacity-0-init delay-300"
-            style={{
-              background: 'var(--bg-card)',
-              border: `1.5px solid ${focused ? 'var(--accent)' : 'var(--border-subtle)'}`,
-              borderRadius: 20,
-              padding: '4px 4px 4px 20px',
-              transition: 'all 0.3s',
-              boxShadow: focused ? '0 0 0 4px var(--accent-dim)' : 'none',
-              position: 'relative',
-            }}
-          >
-            <textarea
-              ref={textareaRef}
-              id="idea-input"
-              className="input-primary"
-              value={text}
-              onChange={e => setText(e.target.value)}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              placeholder={examples[exampleIdx]}
-              rows={4}
-              style={{
-                width: '100%', background: 'transparent',
-                border: 'none', outline: 'none', padding: '16px 0',
-                resize: 'none', fontSize: 16, lineHeight: 1.7,
-                color: 'var(--text-primary)',
-                fontFamily: 'Inter, sans-serif',
-              }}
-            />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12 }}>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                {text.length > 0 ? `${text.length} characters` : 'Write in plain language — no jargon needed'}
-              </span>
-              <button
-                id="find-next-step-btn"
-                className="btn-accent"
-                disabled={text.trim().length < 10}
-                onClick={() => onNext(text)}
-                style={{ padding: '12px 28px', borderRadius: 14, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}
-              >
-                Find My Next Step
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          {/* Trust signals */}
-          <div className="animate-fade-up opacity-0-init delay-400" style={{ display: 'flex', gap: 24, marginTop: 32, flexWrap: 'wrap' }}>
-            {[
-              { icon: '🔒', text: 'Private & secure' },
-              { icon: '⚡', text: 'Answer in under 60 seconds' },
-              { icon: '🇮🇳', text: 'India-specific guidance' },
-            ].map((item, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
-                <span>{item.icon}</span>
-                <span>{item.text}</span>
-              </div>
-            ))}
-          </div>
-
-        </div>
+            {words[wordIndex]}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      {/* Bottom section — Part 01 & 02 answers */}
-      <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '40px 32px', maxWidth: 900, margin: '0 auto', width: '100%' }}>
-        <DesignRationalePreview />
+      {/* Bottom-right counter */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3 }}
+        style={{
+          position: 'absolute', bottom: 48, right: 48,
+          fontSize: 'clamp(48px, 10vw, 96px)',
+          fontFamily: 'Instrument Serif, serif',
+          color: 'hsl(var(--text))',
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1
+        }}
+      >
+        {String(count).padStart(3, '0')}
+      </motion.div>
+
+      {/* Bottom progress bar */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        height: 3, background: 'rgba(255,255,255,0.06)'
+      }}>
+        <div
+          className="accent-gradient"
+          style={{
+            height: '100%',
+            transform: `scaleX(${count / 100})`,
+            transformOrigin: 'left',
+            transition: 'transform 0.05s linear',
+            boxShadow: '0 0 8px rgba(137, 170, 204, 0.35)'
+          }}
+        />
+      </div>
+    </motion.div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// NAVBAR
+// ─────────────────────────────────────────────────────────────────
+function Navbar({ activeSection, onNav }) {
+  const [scrolled, setScrolled] = useState(false)
+  const [logoHovered, setLogoHovered] = useState(false)
+
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 100)
+    window.addEventListener('scroll', handler, { passive: true })
+    return () => window.removeEventListener('scroll', handler)
+  }, [])
+
+  const links = ['Home', 'Clarity', 'About']
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0,
+      zIndex: 50, display: 'flex', justifyContent: 'center',
+      paddingTop: 20, paddingInline: 16
+    }}>
+      <div style={{
+        display: 'inline-flex', alignItems: 'center',
+        borderRadius: 9999,
+        backdropFilter: 'blur(16px)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        background: 'rgba(20,20,20,0.7)',
+        padding: '8px 8px',
+        gap: 4,
+        boxShadow: scrolled ? '0 8px 32px rgba(0,0,0,0.4)' : 'none',
+        transition: 'box-shadow 0.3s ease'
+      }}>
+        {/* Logo */}
+        <div
+          onMouseEnter={() => setLogoHovered(true)}
+          onMouseLeave={() => setLogoHovered(false)}
+          style={{
+            position: 'relative',
+            width: 36, height: 36,
+            borderRadius: '50%',
+            cursor: 'pointer',
+            transform: logoHovered ? 'scale(1.1)' : 'scale(1)',
+            transition: 'transform 0.2s ease',
+            flexShrink: 0
+          }}
+        >
+          {/* Gradient ring */}
+          <div style={{
+            position: 'absolute', inset: -2,
+            borderRadius: '50%',
+            background: logoHovered
+              ? 'linear-gradient(270deg, #89AACC 0%, #4E85BF 100%)'
+              : 'linear-gradient(90deg, #89AACC 0%, #4E85BF 100%)',
+            transition: 'background 0.4s ease'
+          }} />
+          {/* Inner */}
+          <div style={{
+            position: 'absolute', inset: 2,
+            borderRadius: '50%',
+            background: 'hsl(var(--bg))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'Instrument Serif, serif',
+            fontStyle: 'italic',
+            fontSize: 13, fontWeight: 400,
+            color: 'hsl(var(--text))'
+          }}>ZC</div>
+        </div>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 20, background: 'var(--stroke-raw)', margin: '0 4px' }} />
+
+        {/* Nav links */}
+        {links.map(link => (
+          <button
+            key={link}
+            onClick={() => onNav(link.toLowerCase())}
+            style={{
+              fontSize: 13, fontWeight: 500,
+              borderRadius: 9999,
+              padding: '6px 16px',
+              border: 'none', cursor: 'pointer',
+              fontFamily: 'Inter, sans-serif',
+              background: activeSection === link.toLowerCase() ? 'rgba(255,255,255,0.08)' : 'transparent',
+              color: activeSection === link.toLowerCase() ? 'hsl(var(--text))' : 'var(--muted-raw)',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={e => { if (activeSection !== link.toLowerCase()) { e.currentTarget.style.color = 'hsl(var(--text))'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' } }}
+            onMouseLeave={e => { if (activeSection !== link.toLowerCase()) { e.currentTarget.style.color = 'var(--muted-raw)'; e.currentTarget.style.background = 'transparent' } }}
+          >
+            {link}
+          </button>
+        ))}
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 20, background: 'var(--stroke-raw)', margin: '0 4px' }} />
+
+        {/* Say hi */}
+        <div className="gradient-border-wrap" style={{ borderRadius: 9999 }}>
+          <button
+            onClick={() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })}
+            style={{
+              position: 'relative', zIndex: 1,
+              fontSize: 13, fontWeight: 500,
+              borderRadius: 9999,
+              padding: '6px 16px',
+              border: '1px solid rgba(255,255,255,0.08)',
+              cursor: 'pointer',
+              fontFamily: 'Inter, sans-serif',
+              background: 'rgba(20,20,20,0.8)',
+              backdropFilter: 'blur(8px)',
+              color: 'hsl(var(--text))',
+              display: 'flex', alignItems: 'center', gap: 6
+            }}
+          >
+            Get Clarity <span style={{ fontSize: 12 }}>↗</span>
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
-/* Inline Part 01 + 02 preview at bottom */
-function DesignRationalePreview() {
+// ─────────────────────────────────────────────────────────────────
+// HERO SECTION
+// ─────────────────────────────────────────────────────────────────
+function Hero({ onGetStarted }) {
+  const nameRef = useRef(null)
+  const blurRefs = useRef([])
+  const [roleIndex, setRoleIndex] = useState(0)
+  const roles = ['Idea-Stage Founder', 'First-Time Entrepreneur', 'Aspiring Builder', 'New Business Owner']
+
+  useEffect(() => {
+    // GSAP entrance
+    const tl = gsap.timeline({ delay: 0.1 })
+    tl.fromTo(nameRef.current,
+      { opacity: 0, y: 50 },
+      { opacity: 1, y: 0, duration: 1.2, ease: 'power3.out' }
+    )
+    tl.fromTo(blurRefs.current.filter(Boolean),
+      { opacity: 0, filter: 'blur(10px)', y: 20 },
+      { opacity: 1, filter: 'blur(0px)', y: 0, duration: 1, stagger: 0.1, ease: 'power3.out' },
+      '-=0.8'
+    )
+  }, [])
+
+  useEffect(() => {
+    const id = setInterval(() => setRoleIndex(i => (i + 1) % roles.length), 2500)
+    return () => clearInterval(id)
+  }, [])
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-      <div className="glass-card" style={{ padding: 24 }}>
-        <div className="section-label" style={{ marginBottom: 12 }}>Part 01 — User Persona</div>
-        <h3 style={{ fontFamily: 'Fraunces, serif', fontSize: 18, fontWeight: 600, marginBottom: 12, color: 'var(--text-primary)' }}>
-          The Idea-Stage Founder
-        </h3>
-        <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.75 }}>
-          This is someone with a concrete business idea but zero clarity on how to legally or operationally bring it to life in India. They represent the highest level of <em>decision paralysis</em> — they Google "how to start a business in India" and get 40 conflicting answers. They don't need a service catalog; they need a trusted voice that says: <strong style={{ color: 'var(--text-primary)' }}>"Here is the one thing you do next."</strong> They are the perfect starting point for Zero Confusion because solving for maximum confusion creates a product that works for every user downstream.
+    <section id="home" style={{
+      position: 'relative', height: '100dvh', overflow: 'hidden',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
+    }}>
+      {/* BG Video */}
+      <HLSVideo />
+
+      {/* Overlays */}
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.20)' }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 200, background: 'linear-gradient(to top, hsl(var(--bg)), transparent)' }} />
+
+      {/* Content */}
+      <div style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '0 24px', maxWidth: 760 }}>
+        {/* Eyebrow */}
+        <div
+          ref={el => blurRefs.current[0] = el}
+          style={{ opacity: 0, fontSize: 11, color: 'var(--muted-raw)', textTransform: 'uppercase', letterSpacing: '0.3em', fontWeight: 600, marginBottom: 32 }}
+        >
+          Clarity-First · India's Business Platform
+        </div>
+
+        {/* Name / Headline */}
+        <h1
+          ref={nameRef}
+          style={{
+            opacity: 0,
+            fontFamily: 'Instrument Serif, serif',
+            fontStyle: 'italic',
+            fontSize: 'clamp(52px, 9vw, 96px)',
+            lineHeight: 0.95,
+            letterSpacing: '-0.02em',
+            color: 'hsl(var(--text))',
+            marginBottom: 28
+          }}
+        >
+          Zero Confusion
+        </h1>
+
+        {/* Role line */}
+        <div
+          ref={el => blurRefs.current[1] = el}
+          style={{ opacity: 0, fontSize: 'clamp(15px, 2vw, 18px)', color: 'var(--muted-raw)', marginBottom: 48, fontWeight: 300 }}
+        >
+          Built for the{' '}
+          <AnimatePresence mode="wait">
+            <motion.span
+              key={roleIndex}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+              style={{
+                display: 'inline-block',
+                fontFamily: 'Instrument Serif, serif',
+                fontStyle: 'italic',
+                color: 'hsl(var(--text))'
+              }}
+            >
+              {roles[roleIndex]}
+            </motion.span>
+          </AnimatePresence>
+          {' '}in India.
+        </div>
+
+        {/* Description */}
+        <p
+          ref={el => blurRefs.current[2] = el}
+          style={{ opacity: 0, fontSize: 15, color: 'var(--muted-raw)', maxWidth: 440, margin: '0 auto 44px', lineHeight: 1.7 }}
+        >
+          You don't need to know what you need. Tell us what you're trying to do — we'll give you a clear, honest plan for what to do next.
+        </p>
+
+        {/* CTAs */}
+        <div
+          ref={el => blurRefs.current[3] = el}
+          style={{ opacity: 0, display: 'inline-flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}
+        >
+          <div className="gradient-border-wrap" style={{ borderRadius: 9999 }}>
+            <button
+              className="btn-solid"
+              onClick={onGetStarted}
+              style={{ padding: '14px 32px', fontSize: 14 }}
+            >
+              Find My Next Step
+            </button>
+          </div>
+          <button
+            className="btn-outline"
+            onClick={() => document.getElementById('how')?.scrollIntoView({ behavior: 'smooth' })}
+            style={{ padding: '14px 32px', fontSize: 14 }}
+          >
+            How it works
+          </button>
+        </div>
+      </div>
+
+      {/* Scroll indicator */}
+      <div style={{
+        position: 'absolute', bottom: 32, left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, zIndex: 10
+      }}>
+        <span style={{ fontSize: 10, color: 'var(--muted-raw)', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 600 }}>Scroll</span>
+        <div style={{ width: 1, height: 40, background: 'var(--stroke-raw)', overflow: 'hidden', position: 'relative' }}>
+          <div
+            className="animate-scroll-down accent-gradient"
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '40%' }}
+          />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// HOW IT WORKS (Journey Map — Section 2 of landing)
+// ─────────────────────────────────────────────────────────────────
+function HowItWorks() {
+  const steps = [
+    { num: '01', icon: '\uD83D\uDDE3\uFE0F', title: 'Tell us your idea', desc: 'Describe what you want to build in plain English. No business vocabulary required. No forms to fill.' },
+    { num: '02', icon: '\u2702\uFE0F', title: 'We cut the noise', desc: "Our AI filters out everything you don't need right now — and gives you a frank, expert take on your idea." },
+    { num: '03', icon: '\uD83C\uDFAF', title: 'You get a clear next step', desc: 'A detailed, India-specific 10-step execution plan. Exactly how, where, and what it costs.' },
+  ]
+
+  return (
+    <section id="how" style={{ background: 'hsl(var(--bg))', padding: 'clamp(80px, 10vw, 140px) 24px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, ease: [0.25, 0.1, 0.25, 1] }}
+          viewport={{ once: true, margin: '-80px' }}
+          style={{ marginBottom: 80 }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{ width: 32, height: 1, background: 'var(--stroke-raw)' }} />
+            <span style={{ fontSize: 11, color: 'var(--muted-raw)', textTransform: 'uppercase', letterSpacing: '0.3em', fontWeight: 600 }}>The Journey</span>
+          </div>
+          <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 'clamp(36px, 5vw, 60px)', lineHeight: 1.1, color: 'hsl(var(--text))', marginBottom: 16 }}>
+            From <em>confused</em> to clear.
+          </h2>
+          <p style={{ fontSize: 15, color: 'var(--muted-raw)', maxWidth: 440, lineHeight: 1.7 }}>
+            A simple three-step process that takes you from not knowing what you need to knowing exactly what to do next.
+          </p>
+        </motion.div>
+
+        {/* Steps */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
+          {steps.map((step, i) => (
+            <motion.div
+              key={step.num}
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: i * 0.15, ease: [0.25, 0.1, 0.25, 1] }}
+              viewport={{ once: true, margin: '-60px' }}
+              style={{
+                background: 'hsl(var(--surface))',
+                border: '1px solid var(--stroke-raw)',
+                borderRadius: 24,
+                padding: 32,
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+              whileHover={{ borderColor: 'rgba(137,170,204,0.35)', transition: { duration: 0.2 } }}
+            >
+              {/* Step number background */}
+              <div style={{
+                position: 'absolute', top: -10, right: 16,
+                fontFamily: 'Instrument Serif, serif',
+                fontSize: 100, fontStyle: 'italic',
+                color: 'rgba(255,255,255,0.03)',
+                lineHeight: 1, userSelect: 'none'
+              }}>{step.num}</div>
+
+              <div style={{ fontSize: 32, marginBottom: 20 }}>{step.icon}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted-raw)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 10 }}>Step {step.num}</div>
+              <h3 style={{ fontSize: 20, fontWeight: 600, color: 'hsl(var(--text))', marginBottom: 12, lineHeight: 1.2 }}>{step.title}</h3>
+              <p style={{ fontSize: 14, color: 'var(--muted-raw)', lineHeight: 1.7 }}>{step.desc}</p>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// THE CLARITY ENGINE (Interactive 3-Screen Flow)
+// ─────────────────────────────────────────────────────────────────
+
+// ── Screen A: Input ──
+function InputScreen({ onSubmit }) {
+  const [value, setValue] = useState('')
+  const [focused, setFocused] = useState(false)
+  const [placeholder, setPlaceholder] = useState('')
+
+  const examples = [
+    'I want to start a D2C skincare brand using Ayurvedic ingredients...',
+    'I have an app idea but don\'t know how to register a company in India...',
+    'I want to open a cloud kitchen in Bengaluru — where do I even start?',
+    'I want to sell handmade jewelry online in India...',
+  ]
+
+  useEffect(() => {
+    setPlaceholder(examples[0])
+    if (focused) return
+    let i = 0
+    const id = setInterval(() => { i = (i + 1) % examples.length; setPlaceholder(examples[i]) }, 3500)
+    return () => clearInterval(id)
+  }, [focused])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.5 }}
+      style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 600, margin: '0 auto', width: '100%' }}
+    >
+      <div>
+        <div style={{ fontSize: 11, color: 'var(--muted-raw)', textTransform: 'uppercase', letterSpacing: '0.3em', fontWeight: 600, marginBottom: 14 }}>
+          The Clarity Engine
+        </div>
+        <h2 style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 'clamp(28px, 4vw, 44px)', lineHeight: 1.15, color: 'hsl(var(--text))', marginBottom: 10 }}>
+          What are you trying to build?
+        </h2>
+        <p style={{ fontSize: 15, color: 'var(--muted-raw)', lineHeight: 1.6 }}>
+          Describe your idea in plain English. No jargon, no forms — just tell us what you're trying to do.
         </p>
       </div>
 
-      <div className="glass-card" style={{ padding: 24 }}>
-        <div className="section-label" style={{ marginBottom: 12 }}>Part 02 — Journey Map</div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.9 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[
-              { step: '1. Arrive', desc: 'Calm, conversational interface — no menus', icon: '🌅' },
-              { step: '2. Brain Dump', desc: '"I want to sell coffee online..."', icon: '💬' },
-              { step: '3. Sorting Hat', desc: 'System identifies: Idea Phase', icon: '🎯' },
-              { step: '4. Clarity Reveal', desc: 'ONE next step surfaced, rest hidden', icon: '✨' },
-              { step: '5. Action', desc: 'Book a Clarity Call to execute it', icon: '📞' },
-            ].map((item, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <span style={{ fontSize: 14 }}>{item.icon}</span>
-                <div>
-                  <span style={{ color: 'var(--accent-light)', fontWeight: 600, fontSize: 12 }}>{item.step}</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: 12 }}> → {item.desc}</span>
-                </div>
-              </div>
-            ))}
+      <div className="zc-input">
+        <textarea
+          rows={5}
+          placeholder={placeholder}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--stroke-raw)' }}>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', fontWeight: 500 }}>
+            {value.length > 0 ? `${value.length} characters` : 'Plain English — no business jargon needed'}
+          </span>
+          <div className="gradient-border-wrap" style={{ borderRadius: 9999 }}>
+            <button
+              className="btn-solid"
+              disabled={value.trim().length < 15}
+              onClick={() => onSubmit(value.trim())}
+              style={{ padding: '11px 24px', fontSize: 13, position: 'relative', zIndex: 1 }}
+            >
+              Analyze my idea
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
           </div>
-          <p style={{ marginTop: 14, fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
-            The logic is linear on purpose: we prevent choice overload by revealing information sequentially, not simultaneously. Users only see what they need to act on right now.
-          </p>
         </div>
       </div>
-    </div>
+
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+        {[['🇮🇳', 'India-specific'], ['🔒', 'Private'], ['⚡', '< 60 seconds']].map(([icon, label]) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'rgba(255,255,255,0.2)', fontWeight: 500 }}>
+            {icon} {label}
+          </div>
+        ))}
+      </div>
+    </motion.div>
   )
 }
 
-/* ─── Screen 2: Clarity Assessment (Loading + Split) ─── */
-function ClarityAssessment({ userInput, onNext }) {
-  const [phase, setPhase] = useState('loading') // loading | reveal
-  const [progress, setProgress] = useState(0)
-  const [loadingText, setLoadingText] = useState('Reading your situation...')
+// ── Screen B: Loading ──
+function LoadingScreen2({ progress }) {
+  const r = 44
+  const circ = r * 2 * Math.PI
+  const offset = circ - (progress / 100) * circ
+  const msgs = ['Reading your idea...', 'Cutting through the noise...', 'Building your roadmap...', 'Almost done...']
+  const msg = msgs[Math.min(Math.floor(progress / 25), 3)]
 
-  const steps = [
-    { text: 'Reading your situation...', pct: 15 },
-    { text: 'Mapping your idea to Indian business stages...', pct: 40 },
-    { text: 'Filtering out what doesn\'t matter yet...', pct: 65 },
-    { text: 'Identifying your one critical next step...', pct: 85 },
-    { text: 'Done. Your clarity report is ready.', pct: 100 },
-  ]
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 360, gap: 20, textAlign: 'center' }}
+    >
+      <div style={{ position: 'relative', width: 110, height: 110 }}>
+        <svg width="110" height="110" className="ring">
+          <circle cx="55" cy="55" r={r} stroke="rgba(255,255,255,0.06)" strokeWidth="3" fill="none" />
+          <circle
+            cx="55" cy="55" r={r}
+            stroke="url(#progress-grad)" strokeWidth="3" fill="none"
+            strokeLinecap="round"
+            className="ring-track"
+            strokeDasharray={circ}
+            strokeDashoffset={offset}
+          />
+          <defs>
+            <linearGradient id="progress-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#89AACC" />
+              <stop offset="100%" stopColor="#4E85BF" />
+            </linearGradient>
+          </defs>
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 600, color: 'hsl(var(--text))' }}>{progress}%</div>
+      </div>
+      <div>
+        <div style={{ fontSize: 17, fontWeight: 500, color: 'hsl(var(--text))', marginBottom: 6 }}>Thinking...</div>
+        <div style={{ fontSize: 14, color: 'var(--muted-raw)' }}>{msg}</div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Screen C: Reveal (split) ──
+function RevealScreen({ aiData, onNext }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr', gap: 0, minHeight: 420 }}
+    >
+      {/* Left */}
+      <div style={{ paddingRight: 40, paddingBottom: 8 }}>
+        <div style={{ fontSize: 11, color: 'var(--muted-raw)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 16 }}>
+          What you don't need yet
+        </div>
+        <h3 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, fontStyle: 'italic', color: 'rgba(255,255,255,0.3)', marginBottom: 24, lineHeight: 1.2 }}>
+          Forget all of this — for now.
+        </h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {aiData.notNowList.map((item, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.06, duration: 0.4 }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 14px', borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.04)',
+                opacity: 0.45
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted-raw)" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round"/></svg>
+              <span style={{ fontSize: 13, color: 'var(--muted-raw)', textDecoration: 'line-through' }}>{item}</span>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div style={{ background: 'var(--stroke-raw)', margin: '0 0' }} />
+
+      {/* Right */}
+      <div style={{ paddingLeft: 40, paddingBottom: 8, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontSize: 11, color: 'hsl(var(--text))', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 16 }}>
+          A genuine take
+        </div>
+        <h3 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, fontStyle: 'italic', color: 'hsl(var(--text))', marginBottom: 24, lineHeight: 1.2 }}>
+          Here's what we think.
+        </h3>
+
+        <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 24, marginBottom: 28, flex: 1 }}>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--stroke-raw)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>💡</div>
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--muted-raw)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: 2 }}>Expert View</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text))' }}>Is this viable?</div>
+            </div>
+          </div>
+          <p style={{ fontSize: 14, lineHeight: 1.75, color: 'rgba(255,255,255,0.65)', fontStyle: 'italic', borderLeft: '2px solid rgba(137,170,204,0.4)', paddingLeft: 16 }}>
+            "{aiData.genuineOpinion}"
+          </p>
+        </div>
+
+        <div className="gradient-border-wrap" style={{ borderRadius: 9999 }}>
+          <button
+            className="btn-solid"
+            style={{ width: '100%', padding: '14px 24px', fontSize: 14, position: 'relative', zIndex: 1 }}
+            onClick={() => onNext(aiData)}
+          >
+            Show me my 10-step plan
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Screen D: Roadmap ──
+function RoadmapScreen({ aiData, onReset }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.6 }}
+      style={{ maxWidth: 700, margin: '0 auto', width: '100%' }}
+    >
+      <div style={{ marginBottom: 48 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <span style={{ fontSize: 11, color: 'var(--muted-raw)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Confused</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted-raw)" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span style={{ fontSize: 11, color: 'var(--muted-raw)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Clarity</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted-raw)" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span style={{ fontSize: 11, color: 'hsl(var(--text))', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Your Plan</span>
+        </div>
+        <h2 style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.1, color: 'hsl(var(--text))', marginBottom: 10 }}>
+          Here's what to do — in order.
+        </h2>
+        <p style={{ fontSize: 14, color: 'var(--muted-raw)', lineHeight: 1.65 }}>
+          10 specific steps with how, where, and estimated cost for India.
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 56 }}>
+        {aiData.roadmap.map((step, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.07, duration: 0.5 }}
+            style={{ display: 'flex', gap: 18, paddingBottom: i < aiData.roadmap.length - 1 ? 28 : 0 }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+              <div className="step-badge">{step.stepNumber}</div>
+              {i < aiData.roadmap.length - 1 && (
+                <div style={{ width: 1, flex: 1, background: 'var(--stroke-raw)', marginTop: 8 }} />
+              )}
+            </div>
+            <div style={{ paddingTop: 2, paddingBottom: i < aiData.roadmap.length - 1 ? 8 : 0 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 600, color: 'hsl(var(--text))', marginBottom: 12, lineHeight: 1.3 }}>{step.title}</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'start' }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.2)', marginBottom: 5 }}>How</div>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 1.65 }}>{step.howTo}</p>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 140, flexShrink: 0 }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.2)', marginBottom: 4 }}>Where</div>
+                    <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>{step.whereTo}</p>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.2)', marginBottom: 4 }}>Est. Cost</div>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'hsl(var(--text))' }}>{step.estimatedCost}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <div style={{ textAlign: 'center' }}>
+        <button className="btn-outline" style={{ fontSize: 13, padding: '10px 24px' }} onClick={onReset}>
+          ← Try a different idea
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── AI Processor ──
+function AIProcessor({ userInput, onSuccess, onError }) {
+  const [progress, setProgress] = useState(0)
+  const [aiData, setAiData] = useState(null)
+  const [phase, setPhase] = useState('loading')
 
   useEffect(() => {
-    let stepIdx = 0
-    const timer = setInterval(() => {
-      if (stepIdx < steps.length) {
-        setLoadingText(steps[stepIdx].text)
-        setProgress(steps[stepIdx].pct)
-        stepIdx++
-      } else {
-        clearInterval(timer)
-        setTimeout(() => setPhase('reveal'), 600)
+    let mounted = true
+    const interval = setInterval(() => setProgress(p => p < 90 ? p + 1 : p), 140)
+
+    const run = async () => {
+      try {
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY
+        if (!apiKey) throw new Error('Missing VITE_GEMINI_API_KEY')
+        const client = new GoogleGenAI({ apiKey })
+        const schema = {
+          type: 'object',
+          required: ['stage', 'genuineOpinion', 'notNowList', 'roadmap'],
+          properties: {
+            stage: { type: 'string' },
+            genuineOpinion: { type: 'string' },
+            notNowList: { type: 'array', items: { type: 'string' }, minItems: 6, maxItems: 8 },
+            roadmap: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['stepNumber', 'title', 'howTo', 'whereTo', 'estimatedCost'],
+                properties: {
+                  stepNumber: { type: 'integer' },
+                  title: { type: 'string' },
+                  howTo: { type: 'string' },
+                  whereTo: { type: 'string' },
+                  estimatedCost: { type: 'string' }
+                }
+              }
+            }
+          }
+        }
+        const interaction = await client.interactions.create({
+          model: 'gemini-3.6-flash',
+          input: `You are a sharp, honest Indian business consultant. A first-time founder says: "${userInput}". Give a genuineOpinion (frank, 2-3 sentences). List 6-8 notNowList items (things they don't need yet). Build a 10-step execution roadmap with how/where/INR cost per step. Be specific and honest. Return valid JSON.`,
+          response_format: { type: 'text', mime_type: 'application/json', schema }
+        })
+        if (!mounted) return
+        const parsed = JSON.parse(interaction.output_text)
+        setAiData(parsed)
+        setProgress(100)
+        clearInterval(interval)
+        setTimeout(() => { if (mounted) setPhase('reveal') }, 700)
+      } catch (err) {
+        console.error(err)
+        if (mounted) onError(err.message)
+        clearInterval(interval)
       }
-    }, 900)
-    return () => clearInterval(timer)
+    }
+    run()
+    return () => { mounted = false; clearInterval(interval) }
   }, [])
 
-  if (phase === 'loading') {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ position: 'relative', zIndex: 1 }}>
-        <div className="orb" style={{ width: 600, height: 600, background: 'radial-gradient(circle, rgba(124,106,247,0.1) 0%, transparent 70%)', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
-        <div className="animate-scale-in" style={{ textAlign: 'center', maxWidth: 480 }}>
-          {/* Spinner */}
-          <div style={{ position: 'relative', width: 80, height: 80, margin: '0 auto 32px' }}>
-            <svg style={{ animation: 'spin-slow 2s linear infinite', width: 80, height: 80 }} viewBox="0 0 80 80">
-              <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border-subtle)" strokeWidth="3" />
-              <circle
-                cx="40" cy="40" r="34" fill="none"
-                stroke="url(#grad)" strokeWidth="3"
-                strokeLinecap="round"
-                strokeDasharray="60 154"
-                strokeDashoffset="-20"
-              />
-              <defs>
-                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#7c6af7" />
-                  <stop offset="100%" stopColor="#c084fc" />
-                </linearGradient>
-              </defs>
-            </svg>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--accent-light)' }}>
-              {progress}%
-            </div>
-          </div>
-
-          <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 12, color: 'var(--text-primary)' }}>
-            Analysing your situation
-          </div>
-          <div style={{ fontSize: 15, color: 'var(--text-secondary)', marginBottom: 32, minHeight: 24, transition: 'all 0.4s' }}>
-            {loadingText}
-          </div>
-
-          <div style={{ background: 'var(--bg-card)', borderRadius: 12, padding: 20, textAlign: 'left', border: '1px solid var(--border-subtle)' }}>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600, letterSpacing: '0.05em' }}>YOUR INPUT</div>
-            <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, fontStyle: 'italic' }}>
-              "{userInput.slice(0, 140)}{userInput.length > 140 ? '...' : ''}"
-            </div>
-          </div>
-
-          {/* Progress */}
-          <div className="progress-bar" style={{ marginTop: 32 }}>
-            <div style={{
-              height: '100%',
-              background: 'linear-gradient(90deg, #7c6af7, #c084fc)',
-              borderRadius: 2,
-              width: `${progress}%`,
-              transition: 'width 0.8s ease-out',
-            }} />
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Reveal: split screen
-  const notNow = [
-    'GST Registration',
-    'Build a website / app',
-    'Hire your first employee',
-    'Open a bank account',
-    'Create a pitch deck',
-    'Find co-founders',
-    'Register a trademark',
-    'Plan your marketing',
-    'Set up social media',
-    'Price your product',
-  ]
-
-  return (
-    <div className="min-h-screen flex flex-col" style={{ position: 'relative', zIndex: 1 }}>
-      {/* Top bar */}
-      <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div className="flex items-center gap-3">
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #7c6af7, #9b59f5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, color: 'white' }}>ZC</div>
-          <span style={{ fontWeight: 700, fontSize: 15 }}>Zero Confusion</span>
-        </div>
-        <div className="tag">Stage Identified: Idea Phase 💡</div>
-      </div>
-
-      {/* Split */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: 'calc(100vh - 89px)' }}>
-
-        {/* LEFT — Not now */}
-        <div
-          className="animate-slide-left opacity-0-init"
-          style={{
-            borderRight: '1px solid var(--border-subtle)',
-            padding: '48px 40px',
-            background: 'rgba(255,255,255,0.01)',
-          }}
-        >
-          <div style={{ marginBottom: 28 }}>
-            <div className="section-label" style={{ color: 'var(--text-muted)', marginBottom: 10 }}>What you think you need</div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-muted)', lineHeight: 1.3 }}>
-              All of this?
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 400, marginTop: 6 }}>
-                Forget it — for now.
-              </span>
-            </h2>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {notNow.map((item, i) => (
-              <div
-                key={i}
-                className="animate-fade-up opacity-0-init"
-                style={{
-                  animationDelay: `${i * 60}ms`,
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '12px 16px',
-                  borderRadius: 10,
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid var(--border-subtle)',
-                  opacity: 1 - (i * 0.06),
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--text-muted)', flex: 1, textDecoration: 'line-through', textDecorationColor: 'rgba(86,86,91,0.6)' }}>{item}</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2">
-                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
-                </svg>
-              </div>
-            ))}
-          </div>
-
-          <p style={{ marginTop: 24, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.7 }}>
-            These are all valid. But doing them before your entity is structured is like decorating a house before laying the foundation.
-          </p>
-        </div>
-
-        {/* RIGHT — The one thing */}
-        <div
-          className="animate-slide-right opacity-0-init"
-          style={{
-            padding: '48px 40px',
-            background: 'rgba(124, 106, 247, 0.03)',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <div style={{ marginBottom: 28 }}>
-            <div className="section-label" style={{ marginBottom: 10 }}>What you actually need to do right now</div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>
-              Just this.
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 400, color: 'var(--text-secondary)', marginTop: 6 }}>
-                One decision. One step.
-              </span>
-            </h2>
-          </div>
-
-          {/* The card */}
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(124,106,247,0.12), rgba(192,132,252,0.06))',
-            border: '1.5px solid rgba(124,106,247,0.3)',
-            borderRadius: 20,
-            padding: '32px 28px',
-            marginBottom: 24,
-            position: 'relative',
-            overflow: 'hidden',
-          }}>
-            <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(124,106,247,0.08)', filter: 'blur(30px)' }} />
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(124,106,247,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-                🏛️
-              </div>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent-light)', marginBottom: 2 }}>Priority Action</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Structure Your Business Entity</div>
-              </div>
-            </div>
-
-            <p style={{ fontSize: 14.5, color: 'var(--text-secondary)', lineHeight: 1.75, marginBottom: 20 }}>
-              Before anything else, you need to decide: <strong style={{ color: 'var(--text-primary)' }}>LLP or Private Limited Company?</strong> This one decision affects your taxes, liability, fundraising ability, and compliance load for years to come.
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[
-                'Determines how you\'re taxed in India',
-                'Shields you from personal financial liability',
-                'Unlocks the ability to raise funding',
-              ].map((point, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                  <div className="check-circle">
-                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-                      <path d="M2 6l3 3 5-5" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </div>
-                  <span style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{point}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ marginTop: 'auto' }}>
-            <button
-              id="continue-to-action-btn"
-              className="btn-accent"
-              onClick={onNext}
-              style={{ width: '100%', padding: '16px 24px', borderRadius: 14, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
-            >
-              Show Me My Action Plan
-              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-              </svg>
-            </button>
-            <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>
-              Free to view • Talk to an expert to execute it
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+  if (phase === 'loading') return <LoadingScreen2 progress={progress} />
+  return <RevealScreen aiData={aiData} onNext={onSuccess} />
 }
 
-/* ─── Screen 3: Action Plan ─── */
-function ActionPlan({ onReset }) {
-  const [showRationale, setShowRationale] = useState(false)
-
-  return (
-    <div className="min-h-screen flex flex-col" style={{ position: 'relative', zIndex: 1 }}>
-      <div className="orb" style={{ width: 500, height: 500, background: 'radial-gradient(circle, rgba(124,106,247,0.1) 0%, transparent 70%)', top: -80, right: -80 }} />
-      <div className="orb" style={{ width: 400, height: 400, background: 'radial-gradient(circle, rgba(192,132,252,0.06) 0%, transparent 70%)', bottom: -40, left: -60 }} />
-
-      {/* Nav */}
-      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 32px', borderBottom: '1px solid var(--border-subtle)' }}>
-        <div className="flex items-center gap-3">
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #7c6af7, #9b59f5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, color: 'white' }}>ZC</div>
-          <span style={{ fontWeight: 700, fontSize: 15 }}>Zero Confusion</span>
-        </div>
-        <button
-          onClick={onReset}
-          style={{ fontSize: 13, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-        >
-          ← Start over
-        </button>
-      </nav>
-
-      <div style={{ flex: 1, maxWidth: 800, margin: '0 auto', width: '100%', padding: '60px 32px' }}>
-
-        {/* Breadcrumb */}
-        <div className="animate-fade-up opacity-0-init" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
-          {['Confusion', 'Clarity', 'Action'].map((step, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{
-                padding: '4px 14px', borderRadius: 100,
-                background: i === 2 ? 'rgba(124,106,247,0.15)' : 'transparent',
-                border: `1px solid ${i === 2 ? 'rgba(124,106,247,0.4)' : 'var(--border-subtle)'}`,
-                fontSize: 12, fontWeight: 600,
-                color: i === 2 ? 'var(--accent-light)' : 'var(--text-muted)',
-              }}>
-                {step}
-              </div>
-              {i < 2 && <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>→</span>}
-            </div>
-          ))}
-        </div>
-
-        {/* Main headline */}
-        <div className="animate-fade-up opacity-0-init delay-100" style={{ marginBottom: 8 }}>
-          <span className="tag">Your Next Step</span>
-        </div>
-        <h1
-          className="animate-fade-up opacity-0-init delay-200"
-          style={{
-            fontFamily: 'Fraunces, serif',
-            fontSize: 'clamp(1.8rem, 4vw, 3rem)',
-            fontWeight: 700,
-            lineHeight: 1.2,
-            letterSpacing: '-0.02em',
-            marginBottom: 24,
-            marginTop: 12,
-          }}
-        >
-          Your next step is:{' '}
-          <span style={{
-            background: 'linear-gradient(135deg, #7c6af7, #c084fc)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}>
-            Structuring your entity.
-          </span>
-        </h1>
-
-        {/* Context card */}
-        <div
-          className="animate-fade-up opacity-0-init delay-300 glass-card"
-          style={{ padding: 32, marginBottom: 28, borderColor: 'rgba(124,106,247,0.15)' }}
-        >
-          <p style={{ fontSize: 16.5, color: 'var(--text-secondary)', lineHeight: 1.8, marginBottom: 20 }}>
-            Forget about marketing and web design for a moment.{' '}
-            <strong style={{ color: 'var(--text-primary)' }}>
-              Based on your idea, you need to decide between an LLP and a Pvt Ltd before doing anything else.
-            </strong>
-          </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div style={{
-              padding: '20px', borderRadius: 14,
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid var(--border-subtle)',
-            }}>
-              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, color: 'var(--text-primary)' }}>LLP</div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-                Lower compliance burden. Good if you're bootstrapping and want simplicity. Cannot raise equity funding easily.
-              </div>
-              <div style={{ marginTop: 12, fontSize: 12, color: 'var(--accent-light)', fontWeight: 600 }}>
-                ₹5,000–₹8,000 to incorporate
-              </div>
-            </div>
-            <div style={{
-              padding: '20px', borderRadius: 14,
-              background: 'rgba(124,106,247,0.06)',
-              border: '1.5px solid rgba(124,106,247,0.25)',
-            }}>
-              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                Pvt Ltd
-                <span style={{ fontSize: 10, background: 'rgba(124,106,247,0.2)', color: 'var(--accent-light)', padding: '2px 8px', borderRadius: 100, fontWeight: 700 }}>Recommended</span>
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-                Standard for scalable businesses. Required for most investors. Slightly higher annual compliance.
-              </div>
-              <div style={{ marginTop: 12, fontSize: 12, color: 'var(--accent-light)', fontWeight: 600 }}>
-                ₹10,000–₹15,000 to incorporate
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* What happens next */}
-        <div className="animate-fade-up opacity-0-init delay-400" style={{ marginBottom: 36 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 16 }}>
-            After this step, you'll unlock
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[
-              { emoji: '🏦', text: 'Open a dedicated business bank account' },
-              { emoji: '📜', text: 'Register for GST (when applicable)' },
-              { emoji: '💻', text: 'Build your product and start selling' },
-              { emoji: '📢', text: 'Plan your marketing and brand' },
-            ].map((item, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 14,
-                padding: '14px 18px', borderRadius: 12,
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px solid var(--border-subtle)',
-                opacity: 0.6 + i * 0.02,
-              }}>
-                <span style={{ fontSize: 18 }}>{item.emoji}</span>
-                <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{item.text}</span>
-                <div style={{ marginLeft: 'auto' }}>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <circle cx="8" cy="8" r="7" stroke="var(--border-medium)" strokeWidth="1.5" />
-                  </svg>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* CTA */}
-        <div className="animate-fade-up opacity-0-init delay-500">
-          <button
-            id="book-clarity-call-btn"
-            className="btn-accent animate-bounce-subtle"
-            style={{
-              width: '100%', padding: '20px 32px', borderRadius: 18,
-              fontSize: 18, fontWeight: 700,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-              animation: 'pulse-glow 3s ease-in-out infinite',
-            }}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.68A2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14v2.92z" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Book a Clarity Call to Sort This Out
-          </button>
-          <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>
-            30-minute call with an expert • ₹499 • No hidden fees
-          </p>
-        </div>
-
-        {/* Part 04 Design Rationale */}
-        <div style={{ marginTop: 60 }}>
-          <button
-            onClick={() => setShowRationale(!showRationale)}
-            style={{
-              background: 'none', border: '1px solid var(--border-subtle)',
-              color: 'var(--text-secondary)', cursor: 'pointer',
-              padding: '12px 20px', borderRadius: 10, fontSize: 14,
-              display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s',
-              width: '100%', justifyContent: 'center',
-            }}
-          >
-            {showRationale ? '▲ Hide' : '▼ View'} Part 04: Design Rationale
-          </button>
-
-          {showRationale && <DesignRationale />}
-        </div>
-
-      </div>
-    </div>
-  )
-}
-
-/* ─── Part 04: Design Rationale ─── */
-function DesignRationale() {
-  const points = [
-    {
-      q: 'Why did you design it this way?',
-      a: `Traditional service menus force users to self-diagnose. "Do I need GST? A trademark? A company?" — someone at Idea Stage has no context to answer these questions. We flipped the model: start with their goals in plain language, then let the system do the diagnosis. The conversational, input-first approach removes the cognitive load from the user entirely. They don't choose a service — the platform surfaces the right one automatically.`,
-      icon: '🎨',
-    },
-    {
-      q: 'What decisions did you make for the user?',
-      a: `We decided to hide everything except the one next action. All business jargon (MCA, ROC, DIN, DSC) is invisible to the user in early screens. We also decided not to show pricing, timelines, or competing options until the user has committed to understanding their one step. The comparison of LLP vs Pvt Ltd is shown only after the user reaches Screen 3 — after emotional buy-in has been established.`,
-      icon: '🧠',
-    },
-    {
-      q: 'What did you intentionally leave out?',
-      a: `We left out: a navigation menu, a service catalog, pricing pages, testimonials (on Screen 1), success stories, FAQs, and footer links. All of these are noise for a user in "confusion mode." Even the logo is minimal — it should feel like a calm conversation, not a SaaS product page. We also left out multiple CTAs — there is exactly one button per screen, always pointing forward.`,
-      icon: '✂️',
-    },
-    {
-      q: 'How does your experience reduce confusion?',
-      a: `By enforcing a sequential, single-focus flow: the user can only see what's relevant to them right now. The "Confusion → Clarity → Action" breadcrumb makes them feel in control of a process, not lost in a product. The split screen in Screen 2 is especially deliberate — visually demonstrating that we're filtering noise for them. The user feels understood, not overwhelmed. One step. One call. That's it.`,
-      icon: '🔍',
-    },
-  ]
-
-  return (
-    <div className="animate-fade-up" style={{ marginTop: 24 }}>
-      <div className="glass-card" style={{ padding: '32px 28px' }}>
-        <div className="section-label" style={{ marginBottom: 20 }}>Part 04 — Design Rationale</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {points.map((item, i) => (
-            <div key={i} style={{ paddingBottom: i < points.length - 1 ? 24 : 0, borderBottom: i < points.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                <span style={{ fontSize: 22, flexShrink: 0, marginTop: 2 }}>{item.icon}</span>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', marginBottom: 8 }}>
-                    {i + 1}. {item.q}
-                  </div>
-                  <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.75 }}>
-                    {item.a}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ─── Main App ─── */
-export default function App() {
-  const [screen, setScreen] = useState(1) // 1, 2, 3
+// ── Main Clarity Section ──
+function ClarityEngine() {
+  const [flow, setFlow] = useState('input')
   const [userInput, setUserInput] = useState('')
+  const [aiData, setAiData] = useState(null)
+  const [error, setError] = useState('')
 
-  const handleScreen1Next = (text) => {
-    setUserInput(text)
-    setScreen(2)
-    window.scrollTo(0, 0)
-  }
-  const handleScreen2Next = () => {
-    setScreen(3)
-    window.scrollTo(0, 0)
-  }
-  const handleReset = () => {
-    setScreen(1)
-    setUserInput('')
-    window.scrollTo(0, 0)
-  }
+  const reset = () => { setFlow('input'); setUserInput(''); setAiData(null); setError('') }
+
+  return (
+    <section id="clarity" style={{
+      background: 'hsl(var(--bg))',
+      padding: 'clamp(80px, 10vw, 120px) 24px'
+    }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, ease: [0.25, 0.1, 0.25, 1] }}
+          viewport={{ once: true, margin: '-80px' }}
+          style={{ marginBottom: 64 }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{ width: 32, height: 1, background: 'var(--stroke-raw)' }} />
+            <span style={{ fontSize: 11, color: 'var(--muted-raw)', textTransform: 'uppercase', letterSpacing: '0.3em', fontWeight: 600 }}>Try It Now</span>
+          </div>
+          <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 'clamp(36px, 5vw, 60px)', lineHeight: 1.1, color: 'hsl(var(--text))' }}>
+            The <em>Clarity</em> Engine.
+          </h2>
+        </motion.div>
+
+        <div style={{
+          background: 'hsl(var(--surface))',
+          border: '1px solid var(--stroke-raw)',
+          borderRadius: 28,
+          padding: 'clamp(32px, 5vw, 56px)',
+          minHeight: 480
+        }}>
+          <AnimatePresence mode="wait">
+            {flow === 'input' && <InputScreen key="input" onSubmit={(t) => { setUserInput(t); setFlow('processing') }} />}
+            {flow === 'processing' && <AIProcessor key="ai" userInput={userInput} onSuccess={(d) => { setAiData(d); setFlow('result') }} onError={(e) => { setError(e); setFlow('error') }} />}
+            {flow === 'result' && aiData && <RoadmapScreen key="result" aiData={aiData} onReset={reset} />}
+            {flow === 'error' && (
+              <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: 60 }}>
+                <div style={{ fontSize: 18, fontWeight: 600, color: 'hsl(var(--text))', marginBottom: 10 }}>Couldn't generate your plan</div>
+                <p style={{ fontSize: 14, color: 'var(--muted-raw)', marginBottom: 24 }}>{error}</p>
+                <button className="btn-solid" style={{ padding: '12px 28px', fontSize: 13 }} onClick={reset}>Try again</button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ABOUT / PRINCIPLES SECTION
+// ─────────────────────────────────────────────────────────────────
+function About() {
+  const principles = [
+    { title: 'Clarity before catalog', desc: 'We never ask you to choose a service before we understand your situation.' },
+    { title: 'No jargon, ever', desc: 'ROC, MCA, DIN — you don\'t need to know these terms to get started with us.' },
+    { title: 'One step at a time', desc: 'We hide future steps until the current one is clear. No decision paralysis.' },
+    { title: 'Genuine, not generic', desc: 'Every plan is tailored to your specific idea, situation, and the Indian market.' },
+  ]
+
+  return (
+    <section id="about" style={{ background: 'hsl(var(--bg))', padding: 'clamp(80px, 10vw, 140px) 24px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 80, alignItems: 'start' }}>
+        {/* Left */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, ease: [0.25, 0.1, 0.25, 1] }}
+          viewport={{ once: true, margin: '-80px' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{ width: 32, height: 1, background: 'var(--stroke-raw)' }} />
+            <span style={{ fontSize: 11, color: 'var(--muted-raw)', textTransform: 'uppercase', letterSpacing: '0.3em', fontWeight: 600 }}>About</span>
+          </div>
+          <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 'clamp(32px, 4vw, 52px)', lineHeight: 1.1, color: 'hsl(var(--text))', marginBottom: 20 }}>
+            We exist for <em>one reason.</em>
+          </h2>
+          <p style={{ fontSize: 15, color: 'var(--muted-raw)', lineHeight: 1.75, marginBottom: 16 }}>
+            Starting or growing a business in India shouldn't require you to already know what you need. But every existing platform assumes you do.
+          </p>
+          <p style={{ fontSize: 15, color: 'var(--muted-raw)', lineHeight: 1.75 }}>
+            Zero Confusion is different. You describe what you're trying to achieve. We do the thinking for you — and tell you exactly what your next step should be.
+          </p>
+        </motion.div>
+
+        {/* Right — principles */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {principles.map((p, i) => (
+            <motion.div
+              key={p.title}
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.7, delay: i * 0.1, ease: [0.25, 0.1, 0.25, 1] }}
+              viewport={{ once: true, margin: '-40px' }}
+              style={{
+                display: 'flex', gap: 20, padding: 24,
+                background: 'hsl(var(--surface))',
+                border: '1px solid var(--stroke-raw)',
+                borderRadius: 18
+              }}
+              whileHover={{ borderColor: 'rgba(137,170,204,0.3)', transition: { duration: 0.2 } }}
+            >
+              <div className="step-badge" style={{ flexShrink: 0, marginTop: 2 }}>0{i + 1}</div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'hsl(var(--text))', marginBottom: 6 }}>{p.title}</div>
+                <div style={{ fontSize: 13, color: 'var(--muted-raw)', lineHeight: 1.65 }}>{p.desc}</div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// STATS
+// ─────────────────────────────────────────────────────────────────
+function Stats() {
+  const items = [
+    { value: '100%', label: 'Confusion eliminated' },
+    { value: '< 60s', label: 'To your execution plan' },
+    { value: '₹0', label: 'To get started' },
+  ]
+
+  return (
+    <section style={{
+      background: 'hsl(var(--surface))',
+      borderTop: '1px solid var(--stroke-raw)',
+      borderBottom: '1px solid var(--stroke-raw)',
+      padding: 'clamp(48px, 8vw, 80px) 24px'
+    }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 32 }}>
+        {items.map((item, i) => (
+          <motion.div
+            key={item.label}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: i * 0.12, ease: [0.25, 0.1, 0.25, 1] }}
+            viewport={{ once: true, margin: '-40px' }}
+            style={{ textAlign: 'center' }}
+          >
+            <div style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 'clamp(40px, 6vw, 64px)', lineHeight: 1, color: 'hsl(var(--text))', marginBottom: 10 }}>{item.value}</div>
+            <div style={{ fontSize: 13, color: 'var(--muted-raw)', fontWeight: 500 }}>{item.label}</div>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CONTACT / FOOTER
+// ─────────────────────────────────────────────────────────────────
+function Contact() {
+  const marqueeRef = useRef(null)
+
+  useEffect(() => {
+    if (!marqueeRef.current) return
+    // CSS animation fallback since GSAP marquee needs plugin
+    marqueeRef.current.style.animation = 'marquee 35s linear infinite'
+  }, [])
+
+  return (
+    <section id="contact" style={{ position: 'relative', overflow: 'hidden', paddingTop: 120, paddingBottom: 80 }}>
+      {/* BG Video */}
+      <HLSVideo flipped style={{ opacity: 0.25 }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)' }} />
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 160, background: 'linear-gradient(to bottom, hsl(var(--bg)), transparent)' }} />
+
+      {/* Marquee */}
+      <div style={{ position: 'relative', zIndex: 5, overflow: 'hidden', marginBottom: 80, height: 80, display: 'flex', alignItems: 'center' }}>
+        <div ref={marqueeRef} style={{ display: 'flex', whiteSpace: 'nowrap', willChange: 'transform' }}>
+          {Array(12).fill('CLARITY STARTS HERE • ').map((text, i) => (
+            <span key={i} style={{
+              fontFamily: 'Instrument Serif, serif',
+              fontStyle: 'italic',
+              fontSize: 'clamp(40px, 6vw, 64px)',
+              color: 'rgba(255,255,255,0.06)',
+              paddingRight: 40,
+              lineHeight: 1
+            }}>{text}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* CTA */}
+      <div style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '0 24px', maxWidth: 640, margin: '0 auto' }}>
+        <div style={{ fontSize: 11, color: 'var(--muted-raw)', textTransform: 'uppercase', letterSpacing: '0.3em', fontWeight: 600, marginBottom: 24 }}>
+          Ready to start?
+        </div>
+        <h2 style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 'clamp(40px, 7vw, 72px)', lineHeight: 1.1, color: 'hsl(var(--text))', marginBottom: 24 }}>
+          Book a Clarity Call.
+        </h2>
+        <p style={{ fontSize: 15, color: 'var(--muted-raw)', lineHeight: 1.7, marginBottom: 40, maxWidth: 380, margin: '0 auto 40px' }}>
+          A 30-minute 1-on-1 with an expert who will review your idea and tell you exactly what to do next.
+        </p>
+        <div className="gradient-border-wrap" style={{ borderRadius: 9999, display: 'inline-block', marginBottom: 16 }}>
+          <button
+            className="btn-solid"
+            style={{ padding: '16px 40px', fontSize: 15, position: 'relative', zIndex: 1 }}
+            onClick={() => alert('Booking flow would go here.')}
+          >
+            Book a Clarity Call ↗
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--muted-raw)' }}>30 minutes · ₹499 · No hidden fees</div>
+      </div>
+
+      {/* Footer bar */}
+      <div style={{
+        position: 'relative', zIndex: 10,
+        maxWidth: 1100, margin: '80px auto 0',
+        padding: '32px 24px 0',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 20
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: 'hsl(var(--text))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 11, fontWeight: 400, color: 'hsl(var(--bg))' }}>ZC</div>
+          <span style={{ fontSize: 13, color: 'var(--muted-raw)' }}>Zero Confusion © 2026</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              width: 7, height: 7, borderRadius: '50%', background: '#4ade80',
+              animation: 'pulse-dot 2s ease-in-out infinite'
+            }} />
+            <span style={{ fontSize: 12, color: 'var(--muted-raw)', fontWeight: 500 }}>Taking on new clients</span>
+          </div>
+          <div style={{ display: 'flex', gap: 20 }}>
+            {['Twitter', 'LinkedIn'].map(s => (
+              <a
+                key={s}
+                href="#"
+                style={{ fontSize: 12, color: 'var(--muted-raw)', textDecoration: 'none', fontWeight: 500, transition: 'color 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'hsl(var(--text))' }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--muted-raw)' }}
+              >{s}</a>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ROOT
+// ─────────────────────────────────────────────────────────────────
+export default function App() {
+  const [isLoading, setIsLoading] = useState(true)
+  const [activeSection, setActiveSection] = useState('home')
+
+  const scrollToClarity = useCallback(() => {
+    document.getElementById('clarity')?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
+
+  const handleNav = useCallback((section) => {
+    setActiveSection(section)
+    const el = document.getElementById(section === 'home' ? 'home' : section)
+    if (el) el.scrollIntoView({ behavior: 'smooth' })
+  }, [])
+
+  // Track active section
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) setActiveSection(entry.target.id || 'home')
+        })
+      },
+      { threshold: 0.4 }
+    )
+    ;['home', 'how', 'clarity', 'about', 'contact'].forEach(id => {
+      const el = document.getElementById(id)
+      if (el) observer.observe(el)
+    })
+    return () => observer.disconnect()
+  }, [isLoading])
 
   return (
     <>
-      <div className="noise-overlay" />
+      <AnimatePresence>
+        {isLoading && <LoadingScreen key="loader" onComplete={() => setIsLoading(false)} />}
+      </AnimatePresence>
 
-      {/* Step indicator */}
-      {screen !== 2 && (
-        <div style={{
-          position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
-          display: 'flex', gap: 8, alignItems: 'center',
-          background: 'rgba(15,15,17,0.85)',
-          backdropFilter: 'blur(20px)',
-          padding: '10px 18px', borderRadius: 100,
-          border: '1px solid var(--border-subtle)',
-          zIndex: 100,
-        }}>
-          {[1, 2, 3].map(s => (
-            <div
-              key={s}
-              className={`nav-dot ${screen === s ? 'active' : ''}`}
-              onClick={() => screen > s && setScreen(s)}
-              style={{ cursor: screen > s ? 'pointer' : 'default' }}
-            />
-          ))}
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6, fontWeight: 600 }}>
-            {screen}/3
-          </span>
-        </div>
+      {!isLoading && (
+        <>
+          <Navbar activeSection={activeSection} onNav={handleNav} />
+          <main>
+            <Hero onGetStarted={scrollToClarity} />
+            <HowItWorks />
+            <ClarityEngine />
+            <Stats />
+            <About />
+            <Contact />
+          </main>
+        </>
       )}
-
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        {screen === 1 && <AntiLandingPage onNext={handleScreen1Next} />}
-        {screen === 2 && <ClarityAssessment userInput={userInput} onNext={handleScreen2Next} />}
-        {screen === 3 && <ActionPlan onReset={handleReset} />}
-      </div>
     </>
   )
 }
